@@ -1,0 +1,3 @@
+/boat => index.html
+/boat/debug.js => target/asmjs-unknown-emscripten/debug/boat.js
+/boat/release.js => target/asmjs-unknown-emscripten/release/boat.js
