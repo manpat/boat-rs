@@ -124,7 +124,7 @@ impl<Y, G> Iterator for StackCoro<Y, G> where Y: Clone, G: Generator<Yield=Y, Re
 	}
 }
 
-
+#[allow(unused_macros)]
 macro_rules! parameter_lerp {
 	( ($rc_obj:expr).$param:ident -> $to:expr, $duration:tt @ $delay:expr, $ease:ident ) => {{
 		let rc_obj = $rc_obj.clone();
