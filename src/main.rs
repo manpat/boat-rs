@@ -113,10 +113,14 @@ fn main() {
 		shader.use_program();
 		shader.set_view(&Mat4::ident());
 
-		// let mut screen_size = Vec2i::zero();
+		let drag_threshold = 50.0;
+		let mut drag_start = None;
 
-		// let click_threshold = 50.0;
-		// let mut click_start = None;
+		let mut target_heading = PI/4.0;
+		let mut target_speed = 0.0;
+
+		let mut boat_heading = target_heading;
+		let mut boat_speed = 0.0;
 
 		let mut time = 0.0f32;
 
@@ -128,8 +132,6 @@ fn main() {
 			for e in event_queue.iter() {
 				match *e {
 					Event::Resize(sz) => unsafe {
-						// screen_size = sz;
-
 						gl::Viewport(0, 0, sz.x, sz.y);
 
 						let aspect = sz.x as f32 / sz.y as f32;
@@ -139,9 +141,27 @@ fn main() {
 						shader.set_proj(&proj_view);
 					}
 
-					Event::Move(_pos) => {}
-					Event::Down(_pos) => {}
-					Event::Up(_pos) => {}
+					Event::Down(pos) => {
+						drag_start = Some(pos);
+					}
+
+					Event::Move(pos) => {
+						let drag_start = drag_start.unwrap_or(pos);
+						let diff = pos - drag_start;
+						let dist = diff.length();
+
+						if dist > drag_threshold {
+							target_speed = (dist - drag_threshold).min(100.0) / 100.0;
+							target_heading = diff.to_vec2().to_angle() - PI/4.0;
+
+						} else {
+							target_speed = 0.0;
+						}
+					}
+
+					Event::Up(_) => {
+						drag_start = None;
+					}
 				}
 			}
 
@@ -149,7 +169,19 @@ fn main() {
 
 			event_queue.clear();
 
-			let boat_model_mat = Mat4::yrot(time * PI/16.0)
+			boat_speed += (target_speed - boat_speed) / 60.0;
+
+			let mut heading_diff = target_heading - boat_heading;
+			if heading_diff.abs() > PI {
+				heading_diff = 2.0 * PI - heading_diff.abs();
+			}
+
+			boat_heading += heading_diff.max(-PI/6.0).min(PI/6.0) / 60.0;
+
+			console::set_section("boat_heading", format!("{}", boat_heading));
+			console::set_section("boat_speed", format!("{}", boat_speed));
+
+			let boat_model_mat = Mat4::yrot(boat_heading)
 				* Mat4::translate(Vec3::new(0.0, 0.05 * (time*PI/2.0).sin() * (time*PI/3.0).sin(), 0.0));
 
 			shader.set_view(&boat_model_mat);
