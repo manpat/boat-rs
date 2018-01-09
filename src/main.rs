@@ -42,6 +42,11 @@ impl Vertex for ColorVertex {
 	}
 }
 
+const CAMERA_PITCH: f32 = PI/8.0;
+const CAMERA_YAW: f32 = PI/4.0;
+const CAMERA_FOV: f32 = PI/4.0;
+const CAMERA_DISTANCE: f32 = 12.0;
+
 fn main() {
 	set_coro_as_main_loop(|| {
 		console::init();
@@ -86,6 +91,35 @@ fn main() {
 
 			mb.add_direct(&vs, &es);
 
+			let mast_color = Color::rgb8(187, 112, 70).into();
+			let sail_color = Color::rgb8(171, 220, 107).into();
+
+			let mast_width = 0.02 * 2.0f32.sqrt();
+			let mast_offset = Vec3::new(0.5, 0.0, 0.0);
+			let mast_height = 1.5;
+
+			mb.add_quad(&[
+				V(Vec3::new(-mast_width,        0.18,-mast_width) + mast_offset, mast_color),
+				V(Vec3::new( mast_width,        0.18, mast_width) + mast_offset, mast_color),
+				V(Vec3::new( mast_width, mast_height, mast_width) + mast_offset, mast_color),
+				V(Vec3::new(-mast_width, mast_height,-mast_width) + mast_offset, mast_color),
+			]);
+
+			mb.add_quad(&[
+				V(Vec3::new(-mast_width,        0.18, mast_width) + mast_offset, mast_color),
+				V(Vec3::new( mast_width,        0.18,-mast_width) + mast_offset, mast_color),
+				V(Vec3::new( mast_width, mast_height,-mast_width) + mast_offset, mast_color),
+				V(Vec3::new(-mast_width, mast_height, mast_width) + mast_offset, mast_color),
+			]);
+
+			mb.add_convex_poly(&[
+				V(Vec3::new(-0.0, mast_height, 0.0) + mast_offset, sail_color),
+
+				V(Vec3::new(-0.45, 0.25, 0.0), sail_color),
+				V(Vec3::new(-0.1, 0.25, 0.1), sail_color),
+				V(Vec3::new(-0.0, 0.25, 0.0) + mast_offset, sail_color),
+			]);
+
 			mb.into()
 		};
 
@@ -105,9 +139,9 @@ fn main() {
 			mb.into()
 		};
 
-		let view_mat = Mat4::translate(Vec3::new(0.0, 0.0,-6.0))
-			* Mat4::xrot(PI/8.0)
-			* Mat4::yrot(PI/4.0);
+		let view_mat = Mat4::translate(Vec3::new(0.0, 0.0,-CAMERA_DISTANCE))
+			* Mat4::xrot(CAMERA_PITCH)
+			* Mat4::yrot(CAMERA_YAW);
 
 		let shader = Shader::new(res::shaders::BASIC_VS, res::shaders::BASIC_FS);
 		shader.use_program();
@@ -116,13 +150,14 @@ fn main() {
 		let drag_threshold = 50.0;
 		let mut drag_start = None;
 
-		let mut target_heading = PI/4.0;
+		let mut wave_phase = 0.0;
+
+		let mut target_heading = -3.0 * CAMERA_YAW / 2.0;
 		let mut target_speed = 0.0;
 
+		let mut boat_heading_rate = 0.0;
 		let mut boat_heading = target_heading;
 		let mut boat_speed = 0.0;
-
-		let mut time = 0.0f32;
 
 		loop {
 			let frame_start = Instant::now();
@@ -135,7 +170,7 @@ fn main() {
 						gl::Viewport(0, 0, sz.x, sz.y);
 
 						let aspect = sz.x as f32 / sz.y as f32;
-						let proj_mat = Mat4::perspective(PI/5.0, aspect, 1.0, 100.0);
+						let proj_mat = Mat4::perspective(CAMERA_FOV, aspect, 1.0, 100.0);
 						let proj_view = proj_mat * view_mat;
 
 						shader.set_proj(&proj_view);
@@ -145,14 +180,14 @@ fn main() {
 						drag_start = Some(pos);
 					}
 
-					Event::Move(pos) => {
+					Event::Move(pos) => if drag_start.is_some() {
 						let drag_start = drag_start.unwrap_or(pos);
 						let diff = pos - drag_start;
 						let dist = diff.length();
 
 						if dist > drag_threshold {
 							target_speed = (dist - drag_threshold).min(100.0) / 100.0;
-							target_heading = diff.to_vec2().to_angle() - PI/4.0;
+							target_heading = diff.to_vec2().to_angle() - CAMERA_YAW;
 
 						} else {
 							target_speed = 0.0;
@@ -165,24 +200,42 @@ fn main() {
 				}
 			}
 
-			time += 1.0 / 60.0;
-
 			event_queue.clear();
 
 			boat_speed += (target_speed - boat_speed) / 60.0;
 
 			let mut heading_diff = target_heading - boat_heading;
-			if heading_diff.abs() > PI {
+			if (heading_diff + CAMERA_YAW).abs() > PI {
 				heading_diff = 2.0 * PI - heading_diff.abs();
 			}
 
-			boat_heading += heading_diff.max(-PI/6.0).min(PI/6.0) / 60.0;
+			let heading_factor = 1.0 / 30.0;
 
+			boat_heading_rate *= 1.0 - heading_factor;
+			boat_heading_rate += heading_diff.max(-PI/6.0).min(PI/6.0) * heading_factor;
+			boat_heading += (1.0 - (1.0 - boat_heading_rate/PI).powf(1.2)) * PI / 60.0;
+
+			let wave_phase_offset = (wave_phase*PI/5.0).sin();
+			let wave_omega = wave_phase*PI/3.0 + wave_phase_offset;
+
+			let wave_translate = wave_omega.sin();
+			let wave_slope = wave_omega.cos() * (PI/5.0 * (wave_phase*PI/5.0).cos() + PI/3.0);
+			// wolfram alpha: d sin(sin(pi x/5) + pi x/3) / dx
+
+			let boat_roll = boat_heading_rate / 3.0;
+			let boat_translate = 0.05 * wave_translate - 0.6 * boat_roll.abs() / PI;
+
+			wave_phase += 1.0/60.0 + boat_speed * 1.0 / 60.0;
+
+			console::set_section("boat_heading_rate", format!("{}", boat_heading_rate));
 			console::set_section("boat_heading", format!("{}", boat_heading));
 			console::set_section("boat_speed", format!("{}", boat_speed));
+			console::set_section("boat_roll", format!("{}", boat_roll));
 
-			let boat_model_mat = Mat4::yrot(boat_heading)
-				* Mat4::translate(Vec3::new(0.0, 0.05 * (time*PI/2.0).sin() * (time*PI/3.0).sin(), 0.0));
+			let boat_model_mat = Mat4::translate(Vec3::new(0.0, boat_translate, 0.0))
+				* Mat4::yrot(boat_heading)
+				* Mat4::xrot(boat_roll)
+				* Mat4::zrot(PI / 64.0 * wave_slope);
 
 			shader.set_view(&boat_model_mat);
 			boat_mesh.bind();
