@@ -205,8 +205,8 @@ fn main() {
 			boat_speed += (target_speed - boat_speed) / 60.0;
 
 			let mut heading_diff = target_heading - boat_heading;
-			if (heading_diff + CAMERA_YAW).abs() > PI {
-				heading_diff = 2.0 * PI - heading_diff.abs();
+			if heading_diff.abs() > PI {
+				heading_diff -= 2.0 * PI * heading_diff.signum();
 			}
 
 			let heading_factor = 1.0 / 30.0;
