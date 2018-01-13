@@ -42,6 +42,11 @@ r##"<html>
 
 	<body>
 		<canvas id="canvas"></canvas>
+		<script>
+			if(typeof(Module) === "undefined")
+				Module = {preRun: []};
+			Module.preRun.push(function() {ENV.RUST_BACKTRACE = "1"})
+		</script>
 		<script src="[[pkg_name]]/[[build_type]].js"></script>
 	</body>
 </html>"##;

@@ -6,6 +6,7 @@
 #![feature(const_fn)]
 
 extern crate common;
+extern crate noise;
 
 pub use resources as res;
 pub use common::*;
@@ -46,6 +47,9 @@ const CAMERA_PITCH: f32 = PI/8.0;
 const CAMERA_YAW: f32 = PI/4.0;
 const CAMERA_FOV: f32 = PI/4.0;
 const CAMERA_DISTANCE: f32 = 12.0;
+
+// #[link_args = "-s ASSERTIONS=1"] extern "C" {}
+// #[link_args = "-g4"] extern "C" {}
 
 fn main() {
 	set_coro_as_main_loop(|| {
@@ -245,9 +249,12 @@ fn main() {
 			sea_mesh.bind();
 			sea_mesh.draw(gl::TRIANGLES);
 
-			let dur = frame_start.elapsed();
-			console::set_section("Stats", format!("frame time: {:.1}ms", dur.subsec_nanos() as f64 / 1000_000.0));
-			console::update();
+			let now = Instant::now();
+			if now > frame_start {
+				let dur = now - frame_start;
+				console::set_section("Stats", format!("frame time: {:.1}ms", dur.subsec_nanos() as f64 / 1000_000.0));
+				console::update();
+			}
 
 			yield;
 		}
